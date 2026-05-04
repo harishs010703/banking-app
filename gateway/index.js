@@ -7,11 +7,14 @@ const app = express();
 
 const { sequelize } = require("../shared/config/db");
 
-// Import all models so Sequelize can register them
+// -------------------------------
+// 🔹 Import ALL models (IMPORTANT)
+// -------------------------------
 require("../services/user-service/models/user.model");
 require("../services/account-service/models/account.model");
 require("../services/auth-service/models/session.model");
 require("../services/audit-service/models/auditLog.model");
+<<<<<<< HEAD
 const {
   authenticateToken,
 } = require("../shared/middlewares/authMiddleware");
@@ -24,27 +27,54 @@ const accountRoutes = require(
 );
 const cookieParser = require("cookie-parser");
 // Middleware
+=======
+require("../services/transaction-service/models/transaction.model"); 
+
+// -------------------------------
+// Import Routes
+// -------------------------------
+const authRoutes = require("./routes/auth.routes"); 
+const transactionRoutes = require("../services/transaction-service/routes/transaction.routes"); 
+// -------------------------------
+// Global Middleware
+// -------------------------------
+>>>>>>> 118bfad (Added new feature / changes)
 app.use(express.json());
 app.use(cookieParser());
 
 
-// Gateway routes
+// -------------------------------
+// API Gateway Routes
+// -------------------------------
 app.use("/auth", authRoutes);
+<<<<<<< HEAD
 app.use("/user", authenticateToken , userRoutes);
 app.use(
   "/accounts",
   authenticateToken,
   accountRoutes
 );
+=======
+app.use("/transactions", transactionRoutes); 
+>>>>>>> 118bfad (Added new feature / changes)
 
-/**
- * Sync database tables
- * Development use only
- */
+// -------------------------------
+// Health Check Route
+// -------------------------------
+app.get("/", (req, res) => {
+  res.json({
+    status: "OK",
+    message: "Banking API Gateway running ",
+  });
+});
+
+// -------------------------------
+// Database Sync (DEV ONLY)
+// -------------------------------
 sequelize
-  .sync({ alter: true })
+  .sync({ alter: true }) //  use migrations in production
   .then(() => {
-    console.log("Database tables created/synced successfully.");
+    console.log("Database tables synced successfully.");
 
     const PORT = process.env.PORT || 5000;
 
