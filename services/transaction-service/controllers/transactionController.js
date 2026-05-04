@@ -10,17 +10,14 @@ const {
 } = require("../validators/transactionValidator");
 
 /**
- * 🔁 TRANSFER (ORCHESTRATOR BASED)
+ * 🔁 TRANSFER
  */
 async function transfer(req, res) {
   try {
     const { valid, errors } = validateTransactionInput(req.body);
 
     if (!valid) {
-      return res.status(400).json({
-        success: false,
-        errors,
-      });
+      return res.status(400).json({ success: false, errors });
     }
 
     const {
@@ -30,25 +27,12 @@ async function transfer(req, res) {
       transaction_type,
     } = req.body;
 
-    if (!from_account_number || !to_account_number) {
-      return res.status(400).json({
-        success: false,
-        message: "Both sender and receiver account numbers are required.",
-      });
-    }
-
-    if (!transaction_type) {
-      return res.status(400).json({
-        success: false,
-        message: "transaction_type is required (internal/imps/neft/rtgs)",
-      });
-    }
-
     const txn = await initiateTransfer({
       from_account_number,
       to_account_number,
       amount: Number(amount),
       transaction_type,
+      user_id: req.user.user_id, // 🔐 ADDED
     });
 
     return res.status(200).json({
@@ -58,11 +42,9 @@ async function transfer(req, res) {
     });
 
   } catch (err) {
-    console.error("TRANSFER ERROR:", err.message);
-
     return res.status(500).json({
       success: false,
-      message: err.message || "Transfer failed",
+      message: err.message,
     });
   }
 }
@@ -72,42 +54,22 @@ async function transfer(req, res) {
  */
 async function deposit(req, res) {
   try {
-    const { valid, errors } = validateTransactionInput(req.body);
-
-    if (!valid) {
-      return res.status(400).json({
-        success: false,
-        errors,
-      });
-    }
-
     const { account_number, amount } = req.body;
-
-    if (!account_number) {
-      return res.status(400).json({
-        success: false,
-        message: "Account number is required.",
-      });
-    }
 
     const txn = await depositMoney({
       account_number,
       amount: Number(amount),
+      user_id: req.user.user_id, // 🔐 ADDED
     });
 
-    return res.status(200).json({
+    return res.json({
       success: true,
       message: "Deposit successful",
       transaction: txn,
     });
 
   } catch (err) {
-    console.error("DEPOSIT ERROR:", err.message);
-
-    return res.status(500).json({
-      success: false,
-      message: err.message || "Deposit failed",
-    });
+    return res.status(500).json({ success: false, message: err.message });
   }
 }
 
@@ -116,73 +78,41 @@ async function deposit(req, res) {
  */
 async function withdraw(req, res) {
   try {
-    const { valid, errors } = validateTransactionInput(req.body);
-
-    if (!valid) {
-      return res.status(400).json({
-        success: false,
-        errors,
-      });
-    }
-
     const { account_number, amount } = req.body;
-
-    if (!account_number) {
-      return res.status(400).json({
-        success: false,
-        message: "Account number is required.",
-      });
-    }
 
     const txn = await withdrawMoney({
       account_number,
       amount: Number(amount),
+      user_id: req.user.user_id, // 🔐 ADDED
     });
 
-    return res.status(200).json({
+    return res.json({
       success: true,
       message: "Withdrawal successful",
       transaction: txn,
     });
 
   } catch (err) {
-    console.error("WITHDRAW ERROR:", err.message);
-
-    return res.status(500).json({
-      success: false,
-      message: err.message || "Withdrawal failed",
-    });
+    return res.status(500).json({ success: false, message: err.message });
   }
 }
 
 /**
- * 📊 TRANSACTION HISTORY
+ * 📊 HISTORY
  */
 async function getHistory(req, res) {
   try {
     const { account_id } = req.params;
 
-    if (!account_id) {
-      return res.status(400).json({
-        success: false,
-        message: "account_id is required",
-      });
-    }
-
     const data = await getTransactionHistory(account_id);
 
-    return res.status(200).json({
+    return res.json({
       success: true,
       transactions: data,
     });
 
   } catch (err) {
-    console.error("HISTORY ERROR:", err.message);
-
-    return res.status(500).json({
-      success: false,
-      message: err.message || "Failed to fetch transaction history",
-    });
+    return res.status(500).json({ success: false, message: err.message });
   }
 }
 
@@ -190,5 +120,5 @@ module.exports = {
   transfer,
   deposit,
   withdraw,
-  getHistory, // ✅ added
+  getHistory,
 };

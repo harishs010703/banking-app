@@ -4,6 +4,23 @@ const Transaction = require("../models/transaction.model");
 const { Op } = require("sequelize");
 
 /**
+ * 🔐 OWNERSHIP VALIDATION
+ */
+async function validateOwnership(account, user_id) {
+  if (!account) {
+    throw new Error("Account not found.");
+  }
+
+  if (account.user_id !== user_id) {
+    throw new Error("Unauthorized access to this account.");
+  }
+
+  if (account.status !== "active") {
+    throw new Error("Account is not active.");
+  }
+}
+
+/**
  * 🔥 ORCHESTRATOR
  */
 async function initiateTransfer(data) {
@@ -28,7 +45,12 @@ async function initiateTransfer(data) {
 /**
  * ✅ INTERNAL TRANSFER
  */
-async function processInternalTransfer({ from_account_number, to_account_number, amount }) {
+async function processInternalTransfer({
+  from_account_number,
+  to_account_number,
+  amount,
+  user_id
+}) {
   const t = await sequelize.transaction();
 
   try {
@@ -43,6 +65,9 @@ async function processInternalTransfer({ from_account_number, to_account_number,
       transaction: t,
       lock: t.LOCK.UPDATE,
     });
+
+    // 🔐 OWNERSHIP CHECK
+    await validateOwnership(sender, user_id);
 
     if (!sender || !receiver) {
       throw new Error("Invalid account(s).");
@@ -86,12 +111,9 @@ async function processInternalTransfer({ from_account_number, to_account_number,
  * ⚡ IMPS
  */
 async function processIMPS(data) {
-  console.log("IMPS transfer");
-
   const txn = await processInternalTransfer(data);
   txn.transaction_type = "imps";
   await txn.save();
-
   return txn;
 }
 
@@ -99,14 +121,11 @@ async function processIMPS(data) {
  * 🕒 NEFT
  */
 async function processNEFT(data) {
-  console.log("NEFT transfer (delayed)");
-
   await new Promise(resolve => setTimeout(resolve, 2000));
 
   const txn = await processInternalTransfer(data);
   txn.transaction_type = "neft";
   await txn.save();
-
   return txn;
 }
 
@@ -114,8 +133,6 @@ async function processNEFT(data) {
  * 💰 RTGS
  */
 async function processRTGS(data) {
-  console.log("RTGS transfer");
-
   if (data.amount < 200000) {
     throw new Error("RTGS requires minimum ₹2,00,000");
   }
@@ -123,14 +140,13 @@ async function processRTGS(data) {
   const txn = await processInternalTransfer(data);
   txn.transaction_type = "rtgs";
   await txn.save();
-
   return txn;
 }
 
 /**
  * 💰 DEPOSIT
  */
-async function depositMoney({ account_number, amount }) {
+async function depositMoney({ account_number, amount, user_id }) {
   const t = await sequelize.transaction();
 
   try {
@@ -140,7 +156,8 @@ async function depositMoney({ account_number, amount }) {
       lock: t.LOCK.UPDATE,
     });
 
-    if (!account) throw new Error("Account not found.");
+    // 🔐 OWNERSHIP CHECK
+    await validateOwnership(account, user_id);
 
     account.balance = Number(account.balance) + Number(amount);
     account.available_balance = Number(account.available_balance) + Number(amount);
@@ -170,7 +187,7 @@ async function depositMoney({ account_number, amount }) {
 /**
  * 💸 WITHDRAW
  */
-async function withdrawMoney({ account_number, amount }) {
+async function withdrawMoney({ account_number, amount, user_id }) {
   const t = await sequelize.transaction();
 
   try {
@@ -180,7 +197,8 @@ async function withdrawMoney({ account_number, amount }) {
       lock: t.LOCK.UPDATE,
     });
 
-    if (!account) throw new Error("Account not found.");
+    // 🔐 OWNERSHIP CHECK
+    await validateOwnership(account, user_id);
 
     if (Number(account.available_balance) < Number(amount)) {
       throw new Error("Insufficient balance.");
@@ -225,10 +243,29 @@ async function getTransactionHistory(account_id) {
     order: [["created_at", "DESC"]],
   });
 }
-
 /**
- * 🔚 EXPORTS
+ * 🔐 GET USER TRANSACTIONS (SECURE)
  */
+async function getMyTransactions(user_id) {
+  // 1. Get user accounts
+  const accounts = await Account.findAll({
+    where: { user_id }
+  });
+
+  const accountIds = accounts.map(acc => acc.account_id);
+
+  // 2. Fetch transactions
+  return await Transaction.findAll({
+    where: {
+      [Op.or]: [
+        { from_account_id: accountIds },
+        { to_account_id: accountIds }
+      ]
+    },
+    order: [["created_at", "DESC"]],
+  });
+}
+
 module.exports = {
   initiateTransfer,
   processInternalTransfer,
